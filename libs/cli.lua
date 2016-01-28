@@ -24,17 +24,16 @@ function cli.run(options)
   local command = nil
   local args = {}
   for _,value in ipairs(options) do
-    if value[0] == '-' then
-      args.push(flags)
+    if value:byte(1) == 45 then
+      flags[#flags + 1] = value:sub(2)
     else
       if command == nil then
         command = value
       else
-        args.push(value)
+        args[#args + 1] = value
       end
     end
   end
-  p(command,flags,args)
 
   result = cli.commands[command] or cli.commands[default]
   if result == nil then

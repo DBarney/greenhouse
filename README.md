@@ -1,4 +1,4 @@
-#Greenhouse
+#Greenhouse [![Build Status](https://travis-ci.org/DBarney/greenhouse.svg?branch=master)](https://travis-ci.org/DBarney/greenhouse)
 
 Green house is a small time series database that I am writing for fun to help track the temperature in a small green house that I own. As I don't have the equipment (IoT stuff) to actually do that right now, I'm going to be tracking stats from my machine that I can easily generate.
 

@@ -1,0 +1,7 @@
+language: lua
+
+before_script:
+  - curl -L https://github.com/luvit/lit/raw/$(LIT_VERSION)/get-lit.sh | sh
+
+script:
+  - make test

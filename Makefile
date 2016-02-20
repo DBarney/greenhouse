@@ -1,5 +1,14 @@
 
-.PHONY: test
+.PHONY: test greenhouse bed glaze
+
+all: greenhouse bed glaze
+
+greenhouse: lit
+	@./lit make
+
+bed: lit
+
+glaze: lit
 
 lit:
 	curl -L https://github.com/luvit/lit/raw/master/get-lit.sh | sh

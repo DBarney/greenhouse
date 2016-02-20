@@ -10,6 +10,12 @@ function cli.setDefault(name)
 end
 
 function cli.addCommand(name,fun,config)
+  if name == nil then
+    error("name cannot be nil")
+  end
+  if fun == nil then
+    error("fun cannot be nil: "..name)
+  end
   if cli.commands[name] ~= nil then
     error("command " + name +" is already defined")
   end
@@ -35,9 +41,13 @@ function cli.run(options)
     end
   end
 
-  result = cli.commands[command] or cli.commands[default]
+  result = cli.commands[command]
   if result == nil then
-    error("unknown command ", command)
+    result = cli.commands[default]
+    table.insert(args,1,command)
+  end
+  if result == nil then
+    error("unknown command ", command, default)
   end
   result.exec(args,flags)
 end

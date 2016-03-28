@@ -10,10 +10,13 @@ return {
     "luvit/pretty-print",
     "creationix/weblit-app",
     "creationix/weblit-auto-headers",
-    "luvit/json"
+    "luvit/json",
+    "pagodabox/ffi-cache",
+    "pagodabox/lmmdb"
   },
   files = {
     "**.lua",
+    "**.so",
     "!test*"
   }
 }

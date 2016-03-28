@@ -7,6 +7,7 @@ local start_http = require('http_listener')
 local store = require('store')
 
 return function()
+  local store = store('./greenhouse.db')
   start_udp(store)
   start_http(store,"127.0.0.1",8080)
 end

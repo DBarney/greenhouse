@@ -21,6 +21,14 @@ return function(store, host, port)
 
   .use(weblit.autoHeaders)
 
+  .route({ path = "/complete/:word"}, function (req, res)
+    p(req)
+    local results = store:autoComplete(req.params.word)
+    res.body = json.encode(results)
+    res.headers["content-length"] = #res.body
+    res.code = 200
+  end)
+
   .route({ path = "/query"}, function (req, res)
     local results = {}
     for name, query in pairs(req.query) do

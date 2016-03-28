@@ -3,25 +3,20 @@ local ffi = require('ffi')
 local lmmdb = require('lmmdb')
 local cache = require('ffi-cache')
 
+local jit = require('jit')
+local folder = jit.os .. '-' .. jit.arch
+local compare = module:action('./' .. folder ..'/libcompare.so', ffi.load)
+
+ffi.cdef[[
+int compare_clocks(const MDB_val *a, const MDB_val *b);
+]]
+
 local Env = lmmdb.Env
 local transaction = lmmdb.Txn
 local cursor = lmmdb.Cursor
 local DB = lmmdb.DB
-local enviroment = Env.create()
 
-Env.set_maxdbs(enviroment, 5) -- we only need 5 dbs
-Env.set_mapsize(enviroment, 1024*1024*1024 * 10)
-Env.reader_check(enviroment) -- make sure that no stale readers exist
-
-local store = assert(Env.open(enviroment, './', 0, tonumber('0644', 8)))
-
-local txn = assert(Env.txn_begin(enviroment,nil,0))
-local timeseries = assert(DB.open(txn, "timeseries", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP))
-assert(transaction.commit(txn))
-
-local storage = {
-  db = store
-}
+local storage = {}
 
 ffi.cdef[[
 typedef struct {
@@ -32,7 +27,7 @@ typedef struct {
 
 function storage:insert(group)
   local time = hrtime()
-  local txn = assert(Env.txn_begin(enviroment,nil,0))
+  local txn = assert(Env.txn_begin(self.env,nil,0))
   for key,values in pairs(group) do
     for id,value in pairs(values) do
       local type = type(value)
@@ -40,8 +35,7 @@ function storage:insert(group)
         local pair = cache.typeof["number_t"]()
         pair.creation = time
         pair.value = value
-        p('inserting',key .. '+' .. id)
-        transaction.put(txn, timeseries, key .. '+' .. id, pair, 0)
+        transaction.put(txn, self.timeseries, key .. '+' .. id, pair, 0)
       else
       end
     end
@@ -50,24 +44,22 @@ function storage:insert(group)
 end
 
 function storage:fetch(pattern, limit)
-  local txn = assert(Env.txn_begin(enviroment,nil,0))
+  local txn = assert(Env.txn_begin(self.env,nil,0))
 
   local list = {}
-  local cookie = assert(cursor.open(txn, timeseries))
-  p('looking up',pattern,limit)
+  local cookie = assert(cursor.open(txn, self.timeseries))
   local ok, err = cursor.get(cookie, pattern, nil, cursor.MDB_SET ,nil, -1)
   if not ok then
     transaction.abort(txn)
-    error(err)
+    return {},nil
   end
-  p('looking up',pattern,limit)
-  local ok, err = cursor.get(cookie, pattern, nil, cursor.MDB_LAST_DUP ,nil, -1)
+  local ok, err = cursor.get(cookie, pattern, nil, cursor.MDB_FIRST_DUP ,nil, -1)
   if not ok then
     transaction.abort(txn)
-    error(err)
+    return nil, err
   end
 
-  -- skip ahead a few?
+  -- set up real limits
 
   while limit > 0 do
     limit = limit - 1
@@ -75,17 +67,12 @@ function storage:fetch(pattern, limit)
       cursor.get(cookie, pattern, nil, cursor.MDB_GET_CURRENT, nil, 'number_t*')
     if key == false then
       transaction.abort(txn)
-      error(number)
+      return nil, number
     end
-    -- if key ~= pattern then
-    --   p("didn't match",key,pattern,number)
-    --   break
-    -- end
-    p(key)
 
     list[#list + 1] = tonumber(number.value)
     -- I need to see if this can fail
-    local ok = cursor.get(cookie, pattern, nil, cursor.MDB_PREV_DUP, -1, -1)
+    local ok = cursor.get(cookie, pattern, nil, cursor.MDB_NEXT_DUP, -1, -1)
     if not ok then
       break
     end
@@ -96,4 +83,45 @@ function storage:fetch(pattern, limit)
   return list
 end
 
-return storage
+function storage:autoComplete(pattern)
+  if pattern:len() == 0 then return {} end
+  local txn = assert(Env.txn_begin(self.env,nil,0))
+
+  local list = {}
+  local cookie = assert(cursor.open(txn, self.timeseries))
+  local key, err = cursor.get(cookie, pattern, nil, cursor.MDB_SET_RANGE ,nil, -1)
+
+
+  while key ~= true and key ~= false and key:sub(1,string.len(pattern))==pattern do
+    key,err = cursor.get(cookie, pattern, nil, cursor.MDB_GET_CURRENT, nil, nil)
+    list[#list + 1] = key
+    -- I need to see if this can fail
+    key = cursor.get(cookie, pattern, nil, cursor.MDB_NEXT_NODUP, nil, -1)
+
+  end
+  cursor.close(cookie)
+
+  transaction.abort(txn)
+  return list
+end
+
+return function(path)
+  if not path then path = './greenhouse.db' end
+  local new_store = {}
+
+  new_store.env = Env.create()
+
+  Env.set_maxdbs(new_store.env, 1) -- we only need 1 db
+  Env.set_mapsize(new_store.env, 1024*1024*1024 * 10)
+  Env.reader_check(new_store.env) -- make sure that no stale readers exist
+
+  local store = assert(Env.open(new_store.env, path, Env.MDB_NOSUBDIR, tonumber('0644', 8)))
+
+  local txn = assert(Env.txn_begin(new_store.env,nil,0))
+  new_store.timeseries = assert(DB.open(txn, "timeseries", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP))
+  assert(DB.set_dupsort(txn,new_store.timeseries,compare.compare_clocks))
+  assert(transaction.commit(txn))
+
+  setmetatable(new_store, { __index = storage})
+  return new_store
+end

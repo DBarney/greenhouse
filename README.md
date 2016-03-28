@@ -11,7 +11,8 @@ I really want to explore what it would take to write a time series database that
 The api is going to be very simple.
 
 | request | description | response |
-| GET /compile?query="name" | compile a series of data points into something that can be graphed | `{"name":[0.1,0.2]}` |
+| GET /query?name="query" | compile a series of data points into something that can be graphed | `{"name":[0.1,0.2]}` |
+| GET /complete/:word | auto complete a word from the set of time series stored in the database | `["word","word2"]` |
 | PUT /metrics | send a set of metrics to green house and have them added to the store | 201 CREATED |
 
 ##components

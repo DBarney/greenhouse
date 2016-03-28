@@ -13,7 +13,7 @@ return function(store)
       return
     end
 
-    err,parsed = format.parse(data)
+    parsed, err = format.parse(data)
     if err ~= nil then
       return
     end

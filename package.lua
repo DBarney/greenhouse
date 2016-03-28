@@ -8,6 +8,9 @@ return {
   dependencies = {
     "luvit/require",
     "luvit/pretty-print",
+    "creationix/weblit-app",
+    "creationix/weblit-auto-headers",
+    "luvit/json"
   },
   files = {
     "**.lua",

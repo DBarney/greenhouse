@@ -1,4 +1,13 @@
-language: lua
+language: python
+sudo: false
+
+env:
+  - LUA="luajit 2.1"
+
+before_install:
+  - pip install hererocks
+  - hererocks $PWD --$LUA
+  - mv $PWD/bin/lua $PWD/luajit
 
 script:
   - make test

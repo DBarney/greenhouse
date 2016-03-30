@@ -4,14 +4,14 @@ Green house is a small time series database that I am writing for fun to help tr
 
 #Rationale
 
-I really want to explore what it would take to write a time series database that can draw a few graphs for me. I enjoy lua, and I really like how coroutine based lua works inside of the luvi project. Also I am going to be running this on a Rasberry Pi so resources are limited. Mush them all together and you got Greenhouse built from lua on luvi.
+I really want to explore what it would take to write a time series database that can draw a few graphs for me. I enjoy lua, and I really like how coroutine based lua works inside of the luvi project. Also I am going to be running this on a Raspberry Pi so resources are limited. Mush them all together and you got Greenhouse built from lua on luvi.
 
 ##api
 
 The api is going to be very simple.
 
 | request | description | response |
-| GET /query?name="query" | compile a series of data points into something that can be graphed | `{"name":[0.1,0.2]}` |
+| GET /query?name={"pattern":"info:me.com+count","start":"1h","stop":"now","step":60} | compile a series of data points into something that can be graphed | `{"name":{"points":[0.1,0.2],"count":2\,"min":0.1,"max":0.2}}` |
 | GET /complete/:word | auto complete a word from the set of time series stored in the database | `["word","word2"]` |
 | PUT /metrics | send a set of metrics to green house and have them added to the store | 201 CREATED |
 

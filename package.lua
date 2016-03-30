@@ -17,6 +17,7 @@ return {
   },
   files = {
     "**.lua",
-    "**.so"
+    "**.so",
+    "!lua_install"
   }
 }

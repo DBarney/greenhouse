@@ -9,6 +9,6 @@ typedef struct {
 
 int compare_clocks(const MDB_val *a, const MDB_val *b)
 {
-  return (*(long *)a->mv_data < *(long *)b->mv_data) ? -1 :
-    *(long *)a->mv_data > *(long *)b->mv_data;
+  return (*(long long *)a->mv_data < *(long long *)b->mv_data) ? -1 :
+    *(long long *)a->mv_data > *(long long *)b->mv_data;
 }

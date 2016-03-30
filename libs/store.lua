@@ -1,4 +1,5 @@
 local hrtime = require('uv').hrtime
+local null = require('json').null
 local ffi = require('ffi')
 local lmmdb = require('lmmdb')
 local cache = require('ffi-cache')
@@ -20,8 +21,8 @@ local storage = {}
 
 ffi.cdef[[
 typedef struct {
-  long creation; // creation date
-  long value;
+  long long creation; // creation date
+  double value;
 } number_t;
 ]]
 
@@ -43,44 +44,69 @@ function storage:insert(group)
   assert(transaction.commit(txn))
 end
 
-function storage:fetch(pattern, limit)
+function storage:fetch(pattern, start, stop, steps)
+  local step = math.floor((stop - start)/ steps)
   local txn = assert(Env.txn_begin(self.env,nil,0))
+  local start_key = cache.typeof["number_t"]()
+  start_key.creation = start
+  local stop_key = cache.typeof["number_t"]()
+  stop_key.creation = stop
+  local now = cache.typeof["number_t"]()
+  now.creation = hrtime()
 
-  local list = {}
   local cookie = assert(cursor.open(txn, self.timeseries))
-  local ok, err = cursor.get(cookie, pattern, nil, cursor.MDB_SET ,nil, -1)
-  if not ok then
+  local key, value = cursor.get(cookie, pattern, start_key, cursor.MDB_GET_BOTH_RANGE ,nil, 'number_t*')
+  if key ~= pattern then
     transaction.abort(txn)
-    return {},nil
-  end
-  local ok, err = cursor.get(cookie, pattern, nil, cursor.MDB_FIRST_DUP ,nil, -1)
-  if not ok then
-    transaction.abort(txn)
-    return nil, err
+    return {points = {}, count = 0},nil
   end
 
-  -- set up real limits
-
-  while limit > 0 do
-    limit = limit - 1
-    local key, number =
+  local buckets = {}
+  while value.creation < stop do
+    key, value =
       cursor.get(cookie, pattern, nil, cursor.MDB_GET_CURRENT, nil, 'number_t*')
-    if key == false then
-      transaction.abort(txn)
-      return nil, number
+    local idx = math.floor(tonumber((value.creation - start) / step) + 1)
+    local bucket = buckets[idx]
+    if bucket == nil then
+      bucket = {}
+      buckets[idx] = bucket
     end
+    bucket[#bucket + 1] = value.value
 
-    list[#list + 1] = tonumber(number.value)
-    -- I need to see if this can fail
-    local ok = cursor.get(cookie, pattern, nil, cursor.MDB_NEXT_DUP, -1, -1)
+    local ok = cursor.get(cookie, nil, nil, cursor.MDB_NEXT_DUP, -1, -1)
     if not ok then
       break
     end
   end
+
+  local min
+  local max
+  local count = 0
+  local prev = 0
+  local results = {}
+  for idx, bucket in pairs(buckets) do
+    local value = 0
+
+    for _, num in pairs(bucket) do
+      value = value + num
+    end
+    value = tonumber(value)/#bucket
+    results[idx] = value
+    while prev < idx do
+      prev = prev + 1
+      if results[prev] == nil then
+        results[prev] = null
+      end
+      count = count + 1
+    end
+
+    min = math.min(value, min or value)
+    max = math.max(value, max or value)
+  end
   cursor.close(cookie)
 
   transaction.abort(txn)
-  return list
+  return {points = results, min = min, max = max, count = count}
 end
 
 function storage:autoComplete(pattern)
@@ -105,6 +131,15 @@ function storage:autoComplete(pattern)
   return list
 end
 
+function storage:info()
+  local info = {}
+  local stat = Env.stat(self.env)
+  for _, key in pairs({'ms_psize','ms_depth','ms_branch_pages','ms_leaf_pages','ms_overflow_pages','ms_entries'}) do
+    info[key] = tonumber(stat[key])
+  end
+  return info
+end
+
 return function(path)
   if not path then path = './greenhouse.db' end
   local new_store = {}
@@ -115,10 +150,10 @@ return function(path)
   Env.set_mapsize(new_store.env, 1024*1024*1024 * 10)
   Env.reader_check(new_store.env) -- make sure that no stale readers exist
 
-  local store = assert(Env.open(new_store.env, path, Env.MDB_NOSUBDIR, tonumber('0644', 8)))
+  local store = assert(Env.open(new_store.env, path, Env.MDB_NOSUBDIR + Env.MDB_NOSYNC, tonumber('0644', 8)))
 
   local txn = assert(Env.txn_begin(new_store.env,nil,0))
-  new_store.timeseries = assert(DB.open(txn, "timeseries", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP))
+  new_store.timeseries = assert(DB.open(txn, "timeseries", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP + DB.MDB_DUPFIXED))
   assert(DB.set_dupsort(txn,new_store.timeseries,compare.compare_clocks))
   assert(transaction.commit(txn))
 

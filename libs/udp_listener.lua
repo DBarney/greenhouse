@@ -1,6 +1,6 @@
 -- udp_listener listens for udp packets and sends them to the parser and then
 -- stores them in the store
-local format = require('format')
+local json = require('json')
 local uv = require('uv')
 return function(store)
   socket = uv.new_udp()
@@ -13,7 +13,7 @@ return function(store)
       return
     end
 
-    parsed, err = format.parse(data)
+    parsed, _, err = json.decode(data)
     if err ~= nil then
       return
     end

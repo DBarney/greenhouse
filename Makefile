@@ -5,18 +5,15 @@ TARGET_DIR=$(LUAJIT_OS)-$(LUAJIT_ARCH)
 
 all: greenhouse
 
-greenhouse: lit
+greenhouse: lit libs
 	@./lit make
 
 lit:
 	curl -L https://github.com/luvit/lit/raw/master/get-lit.sh | sh
 
-./test-runner: lit
-	@./lit make ./cmd/test_runner/
-
-test: ./test-runner
+test: greenhouse
 	mkdir -p ./.test
-	@find . -type f -name "*_test.lua" | xargs ./test-runner; \
+	@find . -type f -name "*_test.lua" | xargs ./greenhouse test; \
 	rm -rf ./.test
 
 libs:

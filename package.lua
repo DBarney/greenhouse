@@ -12,11 +12,11 @@ return {
     "creationix/weblit-auto-headers",
     "luvit/json",
     "pagodabox/ffi-cache",
-    "pagodabox/lmmdb"
+    "pagodabox/lmmdb",
+    "luvit/tap@0.1.1"
   },
   files = {
     "**.lua",
-    "**.so",
-    "!test*"
+    "**.so"
   }
 }

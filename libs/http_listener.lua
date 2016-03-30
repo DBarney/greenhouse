@@ -1,6 +1,5 @@
 local getTime = require('util').getTime
 local hrtime = require('uv').hrtime
-local weblit = require('weblit-app')
 local json = require('json')
 local graph = require('graph')
 
@@ -25,7 +24,7 @@ end
 
 
 return function(store, host, port)
-  weblit
+  require('weblit-app')
   .bind({host = host, port = port})
 
   .use(weblit.autoHeaders)

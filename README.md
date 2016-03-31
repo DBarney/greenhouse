@@ -16,7 +16,7 @@ Content from cell 1 | Content from cell 2
 Content in the first column | Content in the second column
 
 request | description | response
-- | - | -
+------- | ----------- | --------
 GET /query?name={"pattern":"info:me.com+count","start":"1h","stop":"now","step":60} | compile a series of data points into something that can be graphed | `{"name":{"points":[0.1,0.2],"count":2\,"min":0.1,"max":0.2}}`
 GET /complete/:word | auto complete a word from the set of time series stored in the database | `["word","word2"]`
 PUT /metrics | send a set of metrics to green house and have them added to the store | 201 CREATED

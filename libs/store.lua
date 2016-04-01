@@ -36,6 +36,7 @@ function storage:insert(groups)
       local timeseries_id, err = self:lookup_ids(timeseries_name, object.tags, txn, true)
       if err then
         timeseries_id = hrtime()
+        p(txn, self.names, timeseries_name, timeseries_id, 0)
         assert(transaction.put(txn, self.names, timeseries_name, timeseries_id, 0))
         for tag, value in pairs(object.tags) do
           local tag_key = tag .. ":" .. timeseries_id

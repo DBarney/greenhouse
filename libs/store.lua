@@ -26,17 +26,28 @@ typedef struct {
 } number_t;
 ]]
 
-function storage:insert(group)
+function storage:insert(groups)
   local time = hrtime()
   local txn = assert(Env.txn_begin(self.env,nil,0))
-  for key,values in pairs(group) do
-    for id,value in pairs(values) do
+  for key,object in pairs(groups) do
+    for name,value in pairs(object.values) do
+      local timeseries_name = key .. ":" .. name
+      -- lookup time series ids
+      local timeseries_id, err = self:lookup_ids(timeseries_name, object.tags, txn, true)
+      if err then
+        timeseries_id = hrtime()
+        assert(transaction.put(txn, self.names, timeseries_name, timeseries_id, 0))
+        for tag, value in pairs(object.tags) do
+          local tag_key = tag .. ":" .. timeseries_id
+          assert(transaction.put(txn, self.indexes, tag_key, value, 0))
+        end
+      end
       local type = type(value)
       if type == 'number' then
         local pair = cache.typeof["number_t"]()
         pair.creation = time
         pair.value = value
-        transaction.put(txn, self.timeseries, key .. '+' .. id, pair, 0)
+        assert(transaction.put(txn, self.timeseries, timeseries_id, pair, 0))
       else
       end
     end
@@ -44,9 +55,9 @@ function storage:insert(group)
   assert(transaction.commit(txn))
 end
 
-function storage:fetch(pattern, start, stop, steps)
+function storage:fetch(name, keys, start, stop, steps)
   local step = math.floor((stop - start)/ steps)
-  local txn = assert(Env.txn_begin(self.env,nil,0))
+
   local start_key = cache.typeof["number_t"]()
   start_key.creation = start
   local stop_key = cache.typeof["number_t"]()
@@ -54,59 +65,119 @@ function storage:fetch(pattern, start, stop, steps)
   local now = cache.typeof["number_t"]()
   now.creation = hrtime()
 
+  local collections = {count = 0}
+  local txn = assert(Env.txn_begin(self.env,nil,transaction.MDB_RDONLY))
+  local matches = self:lookup_ids(name,keys,txn)
   local cookie = assert(cursor.open(txn, self.timeseries))
-  local key, value = cursor.get(cookie, pattern, start_key, cursor.MDB_GET_BOTH_RANGE ,nil, 'number_t*')
-  if key ~= pattern then
-    transaction.abort(txn)
-    return {points = {}, count = 0},nil
-  end
-
-  local buckets = {}
-  while value.creation < stop do
-    key, value =
-      cursor.get(cookie, pattern, nil, cursor.MDB_GET_CURRENT, nil, 'number_t*')
-    local idx = math.floor(tonumber((value.creation - start) / step) + 1)
-    local bucket = buckets[idx]
-    if bucket == nil then
-      bucket = {}
-      buckets[idx] = bucket
-    end
-    bucket[#bucket + 1] = value.value
-
-    local ok = cursor.get(cookie, nil, nil, cursor.MDB_NEXT_DUP, -1, -1)
-    if not ok then
-      break
-    end
-  end
-
-  local min
-  local max
-  local count = 0
-  local prev = 0
-  local results = {}
-  for idx, bucket in pairs(buckets) do
-    local value = 0
-
-    for _, num in pairs(bucket) do
-      value = value + num
-    end
-    value = tonumber(value)/#bucket
-    results[idx] = value
-    while prev < idx do
-      prev = prev + 1
-      if results[prev] == nil then
-        results[prev] = null
+  for id,info in pairs(matches.ids) do
+    local key, value = cursor.get(cookie, id, start_key, cursor.MDB_GET_BOTH_RANGE ,"long long*", 'number_t*')
+    assert(key[0] == id)
+    local buckets = {}
+    while value.creation < stop do
+      key, value =
+        cursor.get(cookie, pattern, nil, cursor.MDB_GET_CURRENT, nil, 'number_t*')
+      local idx = math.floor(tonumber((value.creation - start) / step) + 1)
+      local bucket = buckets[idx]
+      if bucket == nil then
+        bucket = {}
+        buckets[idx] = bucket
       end
-      count = count + 1
+      bucket[#bucket + 1] = value.value
+
+      local ok = cursor.get(cookie, nil, nil, cursor.MDB_NEXT_DUP, -1, -1)
+      if not ok then
+        break
+      end
     end
 
-    min = math.min(value, min or value)
-    max = math.max(value, max or value)
+    local min
+    local max
+    local count = 0
+    local prev = 0
+    local results = {}
+    for idx, bucket in pairs(buckets) do
+      local value = 0
+
+      for _, num in pairs(bucket) do
+        value = value + num
+      end
+      value = tonumber(value)/#bucket
+      results[idx] = value
+      while prev < idx do
+        prev = prev + 1
+        if results[prev] == nil then
+          results[prev] = null
+        end
+        count = count + 1
+      end
+
+      min = math.min(value, min or value)
+      max = math.max(value, max or value)
+    end
+    collections.count = collections.count + 1
+    collections[collections.count] = {name = info.name, keys = info.keys, points = results, min = min, max = max, count = count, keys = keys}
   end
   cursor.close(cookie)
 
   transaction.abort(txn)
-  return {points = results, min = min, max = max, count = count}
+  return collections
+end
+
+function storage:lookup_ids(name, keys, txn, exact)
+  local old_name = name
+  if not name:match(":") then
+    name = name  .. ":" .. (keys[name] or "")
+  end
+  keys[old_name] = nil
+  local cookie = assert(cursor.open(txn, self.names))
+  local found, err = cursor.get(cookie, name, nil, cursor.MDB_SET_RANGE , nil, -1)
+
+  local count = 0
+  local indexes = {}
+  while found and found:sub(1,string.len(name))==name do
+    local key, id =
+      cursor.get(cookie, name, nil, cursor.MDB_GET_CURRENT, nil, 'long long*')
+    indexes[tonumber(id[0])] = {name = key,keys = {}}
+    count = count + 1
+
+    found = cursor.get(cookie, nil, nil, cursor.MDB_NEXT_DUP, nil, -1)
+    if not found then
+      found = cursor.get(cookie, nil, nil, cursor.MDB_NEXT, nil, -1)
+    end
+  end
+  cursor.close(cookie)
+
+
+  local cookie = assert(cursor.open(txn, self.indexes))
+  for key,value in pairs(keys) do
+    local remove = {}
+    for id,info in pairs(indexes) do
+      local both = key .. ":" .. id
+      local test_key, test_value = cursor.get(cookie, both, value, cursor.MDB_GET_BOTH ,nil, nil)
+      if test_key == both and test_value == value then
+        info.keys[#info.keys + 1] = test_value
+      else
+        remove[#remove + 1] = id
+      end
+    end
+    for _,id in pairs(remove) do
+      indexes[id] = nil
+      count = count - 1
+    end
+  end
+  cursor.close(cookie)
+
+  if exact then
+    if count == 1 then
+      for id in pairs(indexes) do
+        return id
+      end
+    else
+      return nil, "not an exact match"
+    end
+  else
+    return {ids = indexes, count = count}
+  end
 end
 
 function storage:autoComplete(pattern)
@@ -114,7 +185,7 @@ function storage:autoComplete(pattern)
   local txn = assert(Env.txn_begin(self.env,nil,0))
 
   local list = {}
-  local cookie = assert(cursor.open(txn, self.timeseries))
+  local cookie = assert(cursor.open(txn, self.names))
   local key, err = cursor.get(cookie, pattern, nil, cursor.MDB_SET_RANGE ,nil, -1)
 
 
@@ -146,14 +217,16 @@ return function(path)
 
   new_store.env = Env.create()
 
-  Env.set_maxdbs(new_store.env, 1) -- we only need 1 db
+  Env.set_maxdbs(new_store.env, 3) -- we only need 1 db
   Env.set_mapsize(new_store.env, 1024*1024*1024 * 10)
   Env.reader_check(new_store.env) -- make sure that no stale readers exist
 
-  local store = assert(Env.open(new_store.env, path, Env.MDB_NOSUBDIR + Env.MDB_NOSYNC, tonumber('0644', 8)))
+  local store = assert(Env.open(new_store.env, path, Env.MDB_NOSUBDIR + Env.MDB_MAPASYNC, tonumber('0644', 8)))
 
   local txn = assert(Env.txn_begin(new_store.env,nil,0))
-  new_store.timeseries = assert(DB.open(txn, "timeseries", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP + DB.MDB_DUPFIXED))
+  new_store.timeseries = assert(DB.open(txn, "timeseries", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP + DB.MDB_DUPFIXED + DB.MDB_INTEGERKEY))
+  new_store.names = assert(DB.open(txn, "names", DB.MDB_CREATE + DB.MDB_DUPSORT + DB.MDB_INTEGERDUP + DB.MDB_DUPFIXED))
+  new_store.indexes = assert(DB.open(txn, "indexes", DB.MDB_CREATE + DB.MDB_DUPSORT))
   assert(DB.set_dupsort(txn,new_store.timeseries,compare.compare_clocks))
   assert(transaction.commit(txn))
 

@@ -13,8 +13,8 @@ lit:
 	curl -L https://github.com/luvit/lit/raw/master/get-lit.sh | sh
 
 test: greenhouse
+	rm -rf ./.test
 	mkdir -p ./.test
-	rm -rf ./.test/*
 	@find . -type f -name "*_test.lua" | xargs ./greenhouse test
 
 libs: ./deps/lmmdb/${LMDB_DIR}/liblmdb.so ./libs/${TARGET_DIR}/libcompare.so

@@ -6,7 +6,19 @@ Green house is a small time series database that I am writing for fun to help tr
 
 I really want to explore what it would take to write a time series database that can draw a few graphs for me. I enjoy lua, and I really like how coroutine based lua works inside of the luvi project. Also I am going to be running this on a Raspberry Pi so resources are limited. Mush them all together and you got Greenhouse built from lua on luvi.
 
-##api
+##Building
+
+Building is very simple. all that is needed is jualit installed in the greenhouse folder. Then `make` will generate a greenhouse binary.
+
+##Commands
+
+greenhouse exposes two commands currently.
+
+- `greenhouse` will start the server and it will record all stats.
+- `greenhouse bed` will start a test client that will send test data to a greenhouse server. This can be used to examine how greenhouse behaves and responds to queries.
+
+
+##API
 
 The api is going to be very simple.
 

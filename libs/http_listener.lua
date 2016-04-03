@@ -19,7 +19,7 @@ local function getResults(store, string)
   if stop < start then
     return {error = 'start should be before stop'}
   end
-  return store:fetch(query.pattern, query.keys or {}, start, stop, query.step)
+  return store:fetch(query.pattern, query.tags or {}, start, stop, query.step)
 end
 
 

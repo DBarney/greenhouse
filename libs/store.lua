@@ -116,7 +116,7 @@ function storage:fetch(name, keys, start, stop, steps)
       max = math.max(value, max or value)
     end
     collections.count = collections.count + 1
-    collections[collections.count] = {name = info.name, tags = info.tags, points = results, min = min, max = max, count = count, keys = keys}
+    collections[collections.count] = {name = info.name, tags = info.tags, points = results, min = min, max = max, count = count}
   end
   cursor.close(cookie)
 

@@ -39,7 +39,7 @@ function storage:insert(groups)
         p(txn, self.names, timeseries_name, timeseries_id, 0)
         assert(transaction.put(txn, self.names, timeseries_name, timeseries_id, 0))
         for tag, value in pairs(object.tags) do
-          local tag_key = tag .. ":" .. timeseries_id
+          local tag_key = timeseries_id .. ":" .. tag
           assert(transaction.put(txn, self.indexes, tag_key, value, 0))
         end
       end
@@ -71,7 +71,7 @@ function storage:fetch(name, keys, start, stop, steps)
   local matches = self:lookup_ids(name,keys,txn)
   local cookie = assert(cursor.open(txn, self.timeseries))
   for id,info in pairs(matches.ids) do
-    local key, value = cursor.get(cookie, id, start_key, cursor.MDB_GET_BOTH_RANGE ,"long long*", 'number_t*')
+    local key, value = cursor.get(cookie, id, start_key, cursor.MDB_GET_BOTH_RANGE, "long long*", 'number_t*')
     assert(key[0] == id)
     local buckets = {}
     while value.creation < stop do
@@ -116,7 +116,7 @@ function storage:fetch(name, keys, start, stop, steps)
       max = math.max(value, max or value)
     end
     collections.count = collections.count + 1
-    collections[collections.count] = {name = info.name, keys = info.keys, points = results, min = min, max = max, count = count, keys = keys}
+    collections[collections.count] = {name = info.name, tags = info.tags, points = results, min = min, max = max, count = count, keys = keys}
   end
   cursor.close(cookie)
 
@@ -136,9 +136,12 @@ function storage:lookup_ids(name, keys, txn, exact)
   local count = 0
   local indexes = {}
   while found and found:sub(1,string.len(name))==name do
+    if exact and name:len() ~= found:len() then
+      break
+    end
     local key, id =
       cursor.get(cookie, name, nil, cursor.MDB_GET_CURRENT, nil, 'long long*')
-    indexes[tonumber(id[0])] = {name = key,keys = {}}
+    indexes[tonumber(id[0])] = {name = key, tags = {}}
     count = count + 1
 
     found = cursor.get(cookie, nil, nil, cursor.MDB_NEXT_DUP, nil, -1)
@@ -153,17 +156,30 @@ function storage:lookup_ids(name, keys, txn, exact)
   for key,value in pairs(keys) do
     local remove = {}
     for id,info in pairs(indexes) do
-      local both = key .. ":" .. id
+      local both = id .. ":" .. key
       local test_key, test_value = cursor.get(cookie, both, value, cursor.MDB_GET_BOTH ,nil, nil)
-      if test_key == both and test_value == value then
-        info.keys[#info.keys + 1] = test_value
-      else
+      if not (test_key == both and test_value == value) then
         remove[#remove + 1] = id
       end
     end
     for _,id in pairs(remove) do
       indexes[id] = nil
       count = count - 1
+    end
+  end
+
+  if not exact then
+    for id, info in pairs(indexes) do
+      local matcher = id .. ":"
+      local found,_ = cursor.get(cookie, matcher, nil, cursor.MDB_SET_RANGE, -1, nil)
+
+      while found do
+        local key, value =
+          cursor.get(cookie, name, nil, cursor.MDB_GET_CURRENT, nil, nil)
+        local name = key:match('[0-9]+:(.+)')
+        info.tags[name] = value
+        found = cursor.get(cookie, nil, nil, cursor.MDB_NEXT, nil, -1)
+      end
     end
   end
   cursor.close(cookie)

@@ -1,19 +1,18 @@
 -- Greenhouse is the main server that receives statistical data and stores it
 -- for use later
 
--- local uv = require('uv')
--- local start_udp = require('udp_listener')
+local uv = require('uv')
+local start_udp = require('udp_listener')
 local start_http = require('http_listener')
--- local store = require('store')
 
 return function()
-  local store = store('./greenhouse.db')
+  local store = require('store')('./greenhouse.db')
   start_udp(store)
   start_http(store,"127.0.0.1",8080)
 
   -- record stats about the greenhouse process
   local timer = uv.new_timer()
-  uv.timer_start(timer, 1000, 1000, function()
+  uv.timer_start(timer, 10000, 10000, function()
     local stats = uv.getrusage()
     for _, time in pairs({'stime','utime'}) do
       local times = stats[time]
@@ -31,6 +30,6 @@ return function()
       stats[key] = value
     end
 
-    store:insert({greenhouse = stats})
+    store:insert({greenhouse = {values = stats, tags = {host = "this.machine"}}})
   end)
 end

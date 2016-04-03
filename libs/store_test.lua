@@ -30,6 +30,13 @@ require('tap')(function (test)
     local ids,err = store:lookup_ids("sensor:temp",{},txn)
     p(ids)
     assert(err == nil,err)
+    for _, info in pairs(ids.ids) do
+      local count = 0
+      for _ in pairs(info.tags) do
+        count = count + 1
+      end
+      assert(count == 1, "wrong number of tags were returned")
+    end
     assert(ids.count == 1, "wrong number of ids were returned")
 
     local ids,err = store:lookup_ids("sensor",{sensor = "temp"},txn)

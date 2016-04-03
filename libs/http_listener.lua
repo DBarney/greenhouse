@@ -19,13 +19,14 @@ local function getResults(store, string)
   if stop < start then
     return {error = 'start should be before stop'}
   end
-  return store:fetch(query.pattern,start,stop,query.step)
+  return store:fetch(query.pattern, query.keys or {}, start, stop, query.step)
 end
 
 
 return function(store, host, port)
-  require('weblit-app')
-  .bind({host = host, port = port})
+  local weblit = require('weblit-app')
+
+  weblit.bind({host = host, port = port})
 
   .use(weblit.autoHeaders)
 
@@ -63,7 +64,9 @@ return function(store, host, port)
         res.body = err
         return
       end
-      results[name] = result
+      local count = result.count
+      result.count = nil
+      results[name] = {timeseries = result, count = count}
     end
     res.body = json.encode(results)
     res.headers["content-length"] = #res.body

@@ -5,7 +5,7 @@ local json = require('json')
 local data =
 {
   info = {
-    keys= {hostname="me.com"},
+    tags= {hostname="me.com"},
     values= {
       count = 0,
       time = 12341234,
@@ -13,14 +13,14 @@ local data =
     }
   },
   disk = {
-    keys= {path="/dev/sda"},
+    tags= {path="/dev/sda"},
     values= {
       avail = 1024,
       used = 1024
     }
   },
   cpu = {
-    keys= {cpu="1"},
+    tags= {cpu="1"},
     values= {
       sys = 0.5,
       usr = 0.5,
@@ -28,7 +28,7 @@ local data =
     }
   },
   sensor = {
-    keys= {sensor="1"},
+    tags= {sensor="1"},
     values= {
       temp = 85.0,
       pressure = 1,

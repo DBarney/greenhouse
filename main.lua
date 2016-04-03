@@ -6,12 +6,14 @@ local uv = require 'uv'
 local cli = require 'cli'
 local bed = require 'cmd/bed'
 local greenhouse = require 'cmd/greenhouse'
-local test = require 'cmd/test'
 
+if args[1] == 'test' then
+  local test = require 'cmd/test'
+  cli.addCommand("test",test)
+end
 
 cli.addCommand("run",greenhouse)
 cli.addCommand("bed",bed)
-cli.addCommand("test",test)
 cli.setDefault("run")
 cli.run(args)
 
